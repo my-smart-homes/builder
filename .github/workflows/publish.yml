@@ -55,9 +55,8 @@ jobs:
         # Use self-reference for building the builder itself
         uses: ./
         with:
-          # Cosign disabled for custom infrastructure
+          # Note: --no-cosign-verify can be added after builder image is updated
           args: |
             --${{ matrix.architecture }} \
             --target /data \
-            --no-cosign-verify \
             --generic $GIT_TAG_NAME
