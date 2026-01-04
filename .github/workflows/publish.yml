@@ -18,7 +18,7 @@ jobs:
       architectures: ${{ steps.info.outputs.architectures }}
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Get information
         id: info
@@ -38,29 +38,26 @@ jobs:
         architecture: ${{ fromJson(needs.init.outputs.architectures) }}
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - uses: olegtarasov/get-tag@v2.1.3
+      - uses: olegtarasov/get-tag@v2.1.4
         if: github.event_name == 'release'
         name: Set tag envronment variable
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3.3.0
+        uses: docker/login-action@v3.6.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish ${{ matrix.architecture }} builder
-        # uses: home-assistant/builder@2024.08.2
-        uses: my-smart-homes/builder@master
+        # Use self-reference for building the builder itself
+        uses: ./
         with:
-          # args: |
-          #   --${{ matrix.architecture }} \
-          #   --target /data \
-          #   --cosign \
-          #   --generic $GIT_TAG_NAME
+          # Cosign disabled for custom infrastructure
           args: |
             --${{ matrix.architecture }} \
             --target /data \
+            --no-cosign-verify \
             --generic $GIT_TAG_NAME

@@ -9,13 +9,18 @@ inputs:
     description: "Pull the latest version of builder (set to `false` for testing)"
     required: false
     default: "true"
+  image:
+    description: "Define the builder image archictecture (default: amd64)"
+    required: false
+    default: "amd64"
 runs:
   using: "composite"
   steps:
+    # Cosign disabled for custom infrastructure
     # - name: Install Cosign
-    #   uses: sigstore/cosign-installer@v3.6.0
+    #   uses: sigstore/cosign-installer@v4.0.0
     #   with:
-    #     cosign-release: "v2.4.0"
+    #     cosign-release: "v2.5.3"
 
     - shell: bash
       id: version
@@ -29,16 +34,17 @@ runs:
     - shell: bash
       if: ${{ inputs.pull == 'true' }}
       run: |
-        docker pull ghcr.io/my-smart-homes/amd64-builder:${{ steps.version.outputs.version }}
+        docker pull ghcr.io/my-smart-homes/${{ inputs.image }}-builder:${{ steps.version.outputs.version }}
+        # Cosign verification disabled for custom infrastructure
         # cosign verify \
         #   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
         #   --certificate-identity-regexp https://github.com/my-smart-homes/builder/.* \
-        #   ghcr.io/my-smart-homes/amd64-builder:${{ steps.version.outputs.version }}
+        #   ghcr.io/my-smart-homes/${{ inputs.image }}-builder:${{ steps.version.outputs.version }}
 
     - shell: bash
       id: builder
       run: |
-        builder=$(docker images ghcr.io/my-smart-homes/amd64-builder:${{ steps.version.outputs.version }} -q)
+        builder=$(docker images ghcr.io/my-smart-homes/${{ inputs.image }}-builder:${{ steps.version.outputs.version }} -q)
         echo "id=$builder" >> "$GITHUB_OUTPUT"
 
     - shell: bash
@@ -46,14 +52,19 @@ runs:
       run: |
         env > "${{ github.action_path }}/env_file"
         sed -i "/\(HOME\|TERM\|PWD\|HOSTNAME\|PATH\|SHLVL\|USER\|GOROOT\)/d" "${{ github.action_path }}/env_file"
+        # Work around QEMU aarch64 bugs
+        # https://github.com/tonistiigi/binfmt/issues/215#issuecomment-2613567455
+        sudo sysctl kernel.randomize_va_space=0
 
         docker run --rm --privileged \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             -v ~/.docker:/root/.docker \
             -v ${{ github.workspace }}:/data \
             --env-file "${{ github.action_path }}/env_file" \
-            ghcr.io/my-smart-homes/amd64-builder:${{ steps.version.outputs.version }} \
+            ghcr.io/my-smart-homes/${{ inputs.image }}-builder:${{ steps.version.outputs.version }} \
             ${{ inputs.args }}
+
+        sudo sysctl kernel.randomize_va_space=2
 
     - shell: bash
       id: verify

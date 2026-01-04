@@ -27,6 +27,8 @@ For keep a trust-chain during the built, you need set `identity` and `base_ident
 
 ### Test action example
 
+_Note: Replace `[version]` with the desired tag from the [releases](https://github.com/home-assistant/builder/releases) page._
+
 ```yaml
 name: "Test"
 
@@ -38,9 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Test build
-        uses: home-assistant/builder@master
+        uses: home-assistant/builder@[version]
         with:
           args: |
             --test \
@@ -50,6 +52,8 @@ jobs:
 ```
 
 ### Publish action example
+
+_Note: Replace `[version]` with the desired tag from the [releases](https://github.com/home-assistant/builder/releases) page._
 
 ```yaml
 name: "Publish"
@@ -64,14 +68,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Login to DockerHub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Publish
-        uses: home-assistant/builder@master
+        uses: home-assistant/builder@[version]
         with:
           args: |
             --all \
@@ -108,19 +112,11 @@ Options:
     --version-from <VERSION>
         Use this to set build_from tag if not specified.
 
-  Architecture
-    --armhf
-        Build for arm v6.
-    --armv7
-        Build for arm v7.
+  Architecture (select at least one)
     --amd64
         Build for intel/amd 64bit.
     --aarch64
         Build for arm 64bit.
-    --i386
-        Build for intel/amd 32bit.
-    --all
-        Build all architecture.
 
   Build handling
     --test
@@ -158,6 +154,8 @@ Options:
   Security:
     --cosign
         Enable signing images with cosign.
+    --no-cosign-verify
+        Disable image signature validation.
 ```
 
 ## Local installation
@@ -166,12 +164,6 @@ amd64:
 
 ```bash
 docker pull ghcr.io/home-assistant/amd64-builder:latest
-```
-
-armv7:
-
-```bash
-docker pull ghcr.io/home-assistant/armv7-builder:latest
 ```
 
 aarch64:

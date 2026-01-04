@@ -20,6 +20,7 @@ DOCKER_LOCAL=false
 SELF_CACHE=false
 CUSTOM_CACHE_TAG=
 COSIGN=false
+COSIGN_VERIFY=true
 RELEASE_TAG=false
 GIT_REPOSITORY=
 GIT_BRANCH="master"
@@ -42,29 +43,21 @@ declare -A BUILD_MACHINE=(
                           [odroid-c4]="aarch64" \
                           [odroid-m1]="aarch64" \
                           [odroid-n2]="aarch64" \
-                          [odroid-xu]="armv7" \
-                          [qemuarm]="armhf" \
                           [qemuarm-64]="aarch64" \
-                          [qemux86]="i386" \
                           [qemux86-64]="amd64" \
-                          [raspberrypi]="armhf" \
-                          [raspberrypi2]="armv7" \
-                          [raspberrypi3]="armv7" \
                           [raspberrypi3-64]="aarch64" \
-                          [raspberrypi4]="armv7" \
                           [raspberrypi4-64]="aarch64" \
                           [raspberrypi5-64]="aarch64" \
                           [yellow]="aarch64" \
-                          [green]="aarch64" \
-                          [tinker]="armv7" )
+                          [green]="aarch64" )
 
 
 #### Misc functions ####
 
 function print_help() {
     cat << EOF
-Hass.io build-env for ecosystem:
-docker run --rm my-smart-homes/{arch}-builder:latest [options]
+My Smart Homes ecosystem build utility:
+docker run --rm ghcr.io/my-smart-homes/{arch}-builder:latest [options]
 
 Options:
   -h, --help
@@ -92,19 +85,11 @@ Options:
     --version-from <VERSION>
         Use this to set build_from tag if not specified.
 
-  Architecture
-    --armhf
-        Build for arm v6.
-    --armv7
-        Build for arm v7.
+  Architecture (select at least one)
     --amd64
         Build for intel/amd 64bit.
     --aarch64
         Build for arm 64bit.
-    --i386
-        Build for intel/amd 32bit.
-    --all
-        Build all architecture.
 
   Build handling
     --test
@@ -142,6 +127,8 @@ Options:
   Security:
     --cosign
         Enable signing images with cosign.
+    --no-cosign-verify
+        Disable image signature validation.
 EOF
 
     bashio::exit.nok
@@ -240,10 +227,7 @@ function run_build() {
 
     # Set docker platform from build arch
     case "${build_arch}" in
-        armhf)      docker_platform="linux/arm/v6" ;;
-        armv7)      docker_platform="linux/arm/v7" ;;
         amd64)      docker_platform="linux/amd64" ;;
-        i386)       docker_platform="linux/386" ;;
         aarch64)    docker_platform="linux/arm64" ;;
         *)          bashio::exit.nok "Recived unknown architecture ${build_arch}" ;;
     esac
@@ -254,17 +238,6 @@ function run_build() {
         cosign_base_issuer="$(jq --raw-output '.cosign.base_issuer // "https://token.actions.githubusercontent.com"' "/tmp/build_config/build.json")"
         cosign_identity="$(jq --raw-output '.cosign.identity // empty' "/tmp/build_config/build.json")"
         cosign_issuer="$(jq --raw-output '.cosign.issuer // "https://token.actions.githubusercontent.com"' "/tmp/build_config/build.json")"
-    fi
-
-    # Adjust Qemu CPU
-    if bashio::var.equals "${build_arch}" armhf; then
-        docker_cli+=("--build-arg" "QEMU_CPU=arm1176")
-    fi
-
-    # Ensure docker reports correct architecture
-    # to the containerized build process
-    if bashio::var.equals "${build_arch}" i386; then
-        docker_wrapper="linux32"
     fi
 
     # Check if image exists on docker hub
@@ -528,7 +501,7 @@ function build_addon() {
     # Set defaults build things
     if [ -z "$build_from" ]; then
         bashio::log.info "No build information or from not provided. Using default base image."
-        build_from="my-smart-homes/${build_arch}-base:latest"
+        build_from="ghcr.io/my-smart-homes/${build_arch}-base:latest"
     fi
 
     # Additional build args
@@ -746,7 +719,9 @@ function init_crosscompile() {
     fi
 
     bashio::log.info "Setup crosscompiling feature"
-    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes \
+    docker run --privileged --rm tonistiigi/binfmt --uninstall qemu-* \
+        > /dev/null 2>&1 || bashio::log.warning "Can't remove old qemu binfmt"
+    docker run --rm --privileged tonistiigi/binfmt --install all \
         > /dev/null 2>&1 || bashio::log.warning "Can't enable crosscompiling feature"
 }
 
@@ -780,6 +755,11 @@ function cosign_verify() {
     local pull=$5
 
     local success=false
+
+    if bashio::var.false "${COSIGN_VERIFY}"; then
+        bashio::log.warning "Validation of ${image} signature is disabled"
+        return 0
+    fi
 
     # Support scratch image
     if [ "$image" == "scratch" ]; then
@@ -877,6 +857,9 @@ while [[ $# -gt 0 ]]; do
         --cosign)
             COSIGN=true
             ;;
+        --no-cosign-verify)
+            COSIGN_VERIFY=false
+            ;;
         --cache-tag)
             CUSTOM_CACHE_TAG=$2
             shift
@@ -903,23 +886,14 @@ while [[ $# -gt 0 ]]; do
             DOCKER_PASSWORD=$2
             shift
 	    ;;
-        --armhf)
-            BUILD_LIST+=("armhf")
-            ;;
-        --armv7)
-            BUILD_LIST+=("armv7")
-            ;;
         --amd64)
             BUILD_LIST+=("amd64")
-            ;;
-        --i386)
-            BUILD_LIST+=("i386")
             ;;
         --aarch64)
             BUILD_LIST+=("aarch64")
             ;;
         --all)
-            BUILD_LIST=("armhf" "armv7" "amd64" "i386" "aarch64")
+            bashio::exit.nok "--all is deprecated, use explicit --amd64 --aarch64 to build for both supported platforms instead"
             ;;
         --addon)
             BUILD_TYPE="addon"
